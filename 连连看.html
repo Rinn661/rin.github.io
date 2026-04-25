@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>黄霖版连连看</title>
+    <style>
+        body {
+            text-align: center;
+            font-family: Arial;
+            background: #f5f5f5;
+            margin: 0;
+            padding: 20px 0;
+        }
+
+        #menu {
+            margin-top: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #menu button {
+            padding: 12px 24px;
+            font-size: 16px;
+            margin: 8px;
+            cursor: pointer;
+            background: #4299e1;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            width: 180px;
+        }
+
+        #game {
+            display: none;
+        }
+
+        .info {
+            margin: 10px 0;
+            font-size: 16px;
+        }
+
+        .info button {
+            padding: 6px 12px;
+            background: #f56565;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .board {
+            display: inline-grid;
+            grid-template-columns: repeat(var(--cols), 44px);
+            gap: 2px;
+            background: #bee3f8;
+            padding: 10px;
+            border-radius: 10px;
+        }
+
+        .item {
+            width: 44px;
+            height: 44px;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .item.selected {
+            border: 3px solid #f56565;
+        }
+
+        .rank-box {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .rank-item {
+            cursor: pointer;
+            padding: 4px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .version {
+            position: fixed;
+            left: 10px;
+            bottom: 10px;
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="menu">
+        <h1>黄霖版连连看</h1>
+        <button onclick="start(6,6)">简单 6×6</button>
+        <button onclick="start(8,8)">普通 8×8</button>
+        <button onclick="start(10,10)">困难 10×10</button>
+
+        <div class="rank-box">
+            <h3>🏆 排行榜</h3>
+            <div id="rankList"></div>
+        </div>
+    </div>
+
+    <div id="game">
+        <div class="info">
+            得分：<span id="score">0</span>
+            时间：<span id="time">0</span>s
+            <button onclick="backToMenu()">返回菜单</button>
+        </div>
+        <div class="board" id="board"></div>
+    </div>
+
+    <div class="version">v1.0 黄霖专属</div>
+
+    <script>
+        let ROWS, COLS;
+        let icons = ['🍎','🍊','🍋','🍌','🍉','🍇','🍒','🍑','🥭','🍓'];
+        let first = null;
+        let score = 0;
+        let time = 0;
+        let timer;
+        let audio = new Audio('https://cdn.xiaohongshu.com/discovery-music/1295617333/1295617333.mp3');
+        audio.loop = true;
+
+        function start(r, c) {
+            ROWS = r;
+            COLS = c;
+            menu.style.display = 'none';
+            game.style.display = 'block';
+            board.style.setProperty('--cols', COLS);
+            audio.play();
+            initBoard();
+        }
+
+        function initBoard() {
+            clearInterval(timer);
+            first = null;
+            score = 0;
+            time = 0;
+            score.innerText = '0';
+            time.innerText = '0';
+            board.innerHTML = '';
+
+            let total = ROWS * COLS;
+            let list = [];
+
+            for (let i = 0; i < total / 2; i++) {
+                let ico = icons[i % icons.length];
+                list.push(ico, ico);
+            }
+
+            list.sort(() => Math.random() - 0.5);
+
+            for (let v of list) {
+                let div = document.createElement('div');
+                div.className = 'item';
+                div.innerText = v;
+                div.onclick = select;
+                board.appendChild(div);
+            }
+
+            timer = setInterval(() => {
+                time++;
+                time.innerText = time;
+            }, 1000);
+        }
+
+        function select(e) {
+            let el = e.target;
+            if (el.style.visibility == 'hidden') return;
+            if (el === first) return;
+
+            if (!first) {
+                first = el;
+                first.classList.add('selected');
+                return;
+            }
+
+            if (first.innerText === el.innerText) {
+                first.style.visibility = 'hidden';
+                el.style.visibility = 'hidden';
+                score += 10;
+                score.innerText = score;
+                checkWin();
+            }
+
+            first.classList.remove('selected');
+            first = null;
+        }
+
+        function checkWin() {
+            let all = document.querySelectorAll('.item');
+            let ok = true;
+            all.forEach(i => {
+                if (i.style.visibility !== 'hidden') ok = false;
+            });
+
+            if (ok) {
+                clearInterval(timer);
+                audio.pause();
+                saveRank(score, time);
+                alert('通关成功！得分：' + score + ' 用时：' + time + 's');
+                backToMenu();
+            }
+        }
+
+        function saveRank(s, t) {
+            let list = JSON.parse(localStorage.getItem('llk_rank') || '[]');
+            list.push({ score: s, time: t, date: new Date().toLocaleString() });
+            list.sort((a, b) => b.score - a.score).slice(0, 5);
+            localStorage.setItem('llk_rank', JSON.stringify(list));
+            showRank();
+        }
+
+        function showRank() {
+            let list = JSON.parse(localStorage.getItem('llk_rank') || '[]');
+            let html = '';
+            list.forEach((item, i) => {
+                html += `<div class="rank-item" onclick="alert('得分：${item.score}\\n用时：${item.time}s\\n时间：${item.date}')">
+                    ${i+1}. ${item.score}分 · ${item.time}s
+                </div>`;
+            });
+            rankList.innerHTML = html;
+        }
+
+        function backToMenu() {
+            clearInterval(timer);
+            audio.pause();
+            game.style.display = 'none';
+            menu.style.display = 'flex';
+            showRank();
+        }
+
+        showRank();
+    </script>
+</body>
+</html>
